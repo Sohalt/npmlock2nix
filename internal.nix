@@ -40,13 +40,14 @@ rec {
   parseGitRef = str:
     let
       parts = builtins.split "[#]" str;
+      partsLength = builtins.length parts;
     in
-    assert !(builtins.length parts == 3) ->
-      builtins.throw "[npmlock2nix] failed to parse Git reference `${str}`. Expected a string of format `git+http(s)://domain.tld/repo#branch`";
+    assert !(builtins.elem (partsLength) [ 1 3 ]) ->
+      builtins.throw "[npmlock2nix] failed to parse Git reference `${str}`. Expected a string of format `git+http(s)://domain.tld/repo(#branch)`";
     rec {
       inherit parts;
       url = builtins.replaceStrings [ "git+" ] [ "" ] (builtins.elemAt parts 0);
-      rev = builtins.elemAt parts 2;
+      rev = if partsLength == 3 then (builtins.elemAt parts 2) else "HEAD";
     };
 
   # Description: Takes a string of the format "github:org/repo#revision" and returns
