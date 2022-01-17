@@ -53,24 +53,31 @@ rec {
   isGitRev = str:
     (builtins.match "[0-9a-f]{40}" str) != null;
 
-  # Description: Takes a string of the format "git+http(s)://domain.tld/repo#commitish" and returns
-  # an attribute set { url, commitish }
+  gitRefRegex = "(git(\\+(https?|ssh|file))?)://([^#]+)#(.+)";
+
+  # Description: Takes a string of one the of formats:
+  # * "git+http(s)://domain.tld/repo#commitish"
+  # * "git+ssh://domain.tld/repo#commitish"
+  # * "git+file://domain.tld/repo#commitish"
+  # * "git://domain.tld/repo#commitish"
+  # and returns an attribute set { url, commitish }
+  # (should cover all schemes defined here https://docs.npmjs.com/cli/v8/configuring-npm/package-json#git-urls-as-dependencies)
   # Type: String -> Set
   parseGitRef =
-    let
-      expression = "git\\+(https://[^#]+)#(.+)";
-    in
     str:
       assert builtins.typeOf str != "string" -> throw "parseGitRef expects a string. Got `${builtins.typeOf str}` with value `${toString str}`";
       let
-        m = builtins.match expression str;
+        m = builtins.match gitRefRegex str;
       in
-      assert m == null || builtins.length m != 2 -> throw "parseGitRef expects a string that matches `${expression}` but was called with `${str}`";
+      assert m == null || builtins.length m != 5 -> throw "parseGitRef expects a string that matches `${gitRefRegex}` but was called with `${str}`";
+      let
+        loc = builtins.elemAt m 3;
+        gitMethod = builtins.elemAt m 2;
+      in
       {
-        url = builtins.elemAt m 0;
-        commitish = builtins.elemAt m 1;
-      }
-  ;
+        url = "${if gitMethod == null then "git" else gitMethod}://${loc}";
+        commitish = builtins.elemAt m 4;
+      };
 
   # Description: Takes a string of the format "github:org/repo#revision" and returns
   # an attribute set { org, repo, rev }
@@ -292,7 +299,7 @@ rec {
         # because it only contains the branch name. Therefore we cannot substitute with a nix store path.
         # If we leave the dependency unchanged, npm will try to resolve it and fail. We therefore substitute with a
         # wildcard dependency, which will make npm look at the lockfile.
-        if lib.hasPrefix "github:" version || (builtins.match "git\\+(https://[^#]+)#(.+)" version) != null then
+        if lib.hasPrefix "github:" version || (builtins.match gitRefRegex version) != null then
           "*"
         else version);
       dependencies = if (content ? dependencies) then lib.mapAttrs patchDep content.dependencies else { };
